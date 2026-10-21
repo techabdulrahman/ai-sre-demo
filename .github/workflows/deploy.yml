@@ -1,4 +1,6 @@
+```yaml
 name: deploy
+
 on:
   push:
     branches: [main]
@@ -9,38 +11,51 @@ permissions:
   id-token: write
 
 env:
+  PROJECT_ID: abdulproject-510307
   REGION: asia-south1
-  IMAGE: asia-south1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/demo/demo-app:${{ github.sha }}
+  NAMESPACE: ai-troubleshooter
+  DEPLOYMENT: ai-k8s-demo
+  IMAGE: asia-south1-docker.pkg.dev/abdulproject-510307/demo/demo-app:${{ github.sha }}
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - uses: google-github-actions/auth@v2
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: projects/522415703187/locations/global/workloadIdentityPools/github-pool/providers/github-provider
-          service_account: gh-deployer@project-pythom.iam.gserviceaccount.com
+          workload_identity_provider: projects/807744285814/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: github-deployer@abdulproject-510307.iam.gserviceaccount.com
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
         with:
+          project_id: ${{ env.PROJECT_ID }}
           install_components: gke-gcloud-auth-plugin
 
-      - uses: google-github-actions/get-gke-credentials@v2
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ vars.GKE_LOCATION }}
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Build and push image
         run: |
-          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
-          docker build -t $IMAGE app/
-          docker push $IMAGE
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+          docker build -t "$IMAGE" app/
+          docker push "$IMAGE"
 
-      - name: Deploy
+      - name: Deploy application
         run: |
-          kubectl create namespace demo --dry-run=client -o yaml | kubectl apply -f -
-          sed -i "s|IMAGE_PLACEHOLDER|$IMAGE|" k8s/deployment.yaml
-          kubectl apply -f k8s/deployment.yaml
-          kubectl rollout status deployment/demo-app -n demo --timeout=120s
+          kubectl create namespace "$NAMESPACE" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" k8s/deployment.yaml | kubectl apply -f -
+
+          kubectl rollout status deployment/"$DEPLOYMENT" \
+            -n "$NAMESPACE" --timeout=180s
+```
