@@ -37,6 +37,12 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
           install_components: gke-gcloud-auth-plugin
 
+      - name: Debug GitHub identity
+        run: |
+          echo "Repository: $GITHUB_REPOSITORY"
+          echo "Ref: $GITHUB_REF"
+          echo "Workflow ref: $GITHUB_WORKFLOW_REF"
+
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:
