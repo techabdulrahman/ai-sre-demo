@@ -8,6 +8,7 @@ from google import genai
 from google.genai import types
 from kubernetes import client, config
 from kubernetes.client.exceptions import ApiException
+from urllib3.exceptions import HTTPError as Urllib3HTTPError
 
 try:
     from sre_tools import SRE_TOOLS
@@ -169,6 +170,8 @@ def get_pod_status(pod: str = "", namespace: str = "") -> str:
         )
     except ApiException as exc:
         return f"Kubernetes could not read pod {pod_namespace}/{requested_pod}: {exc}"
+    except (Urllib3HTTPError, OSError) as exc:
+        return f"Kubernetes API is unreachable while reading {pod_namespace}/{requested_pod}: {exc}"
     except ValueError as exc:
         return str(exc)
 
@@ -209,6 +212,8 @@ def get_pod_events(pod: str = "", namespace: str = "") -> str:
         )
     except ApiException as exc:
         return f"Kubernetes could not read events for {pod_namespace}/{requested_pod}: {exc}"
+    except (Urllib3HTTPError, OSError) as exc:
+        return f"Kubernetes API is unreachable while reading events for {pod_namespace}/{requested_pod}: {exc}"
     except ValueError as exc:
         return str(exc)
 
@@ -240,6 +245,8 @@ def get_pod_logs(pod: str = "", namespace: str = "") -> str:
         return json.dumps(logs, default=str)
     except ApiException as exc:
         return f"Kubernetes could not read logs for {pod_namespace}/{requested_pod}: {exc}"
+    except (Urllib3HTTPError, OSError) as exc:
+        return f"Kubernetes API is unreachable while reading logs for {pod_namespace}/{requested_pod}: {exc}"
     except ValueError as exc:
         return str(exc)
 
@@ -253,6 +260,12 @@ def _rule_based_fallback():
         return (
             f"Gemini analysis failed and Kubernetes fallback could not read "
             f"{NAMESPACE}/{POD_NAME}: {exc}"
+        )
+    except (Urllib3HTTPError, OSError) as exc:
+        return (
+            f"Gemini analysis failed and Kubernetes API is unreachable for "
+            f"{NAMESPACE}/{POD_NAME}: {exc}. Check `kubectl config current-context` "
+            "and `kubectl cluster-info`, then reconnect to the cluster."
         )
     except ValueError as exc:
         return f"Gemini analysis failed and Kubernetes fallback could not locate the pod: {exc}"
@@ -330,15 +343,16 @@ def main():
             "Follow the required investigation order, use the available read-only "
             "tools, then report evidence, root cause, and a recommended fix."
         )
-        response = genai.Client(api_key=api_key).models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                tools=tools,
-                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
-            ),
-        )
+        with genai.Client(api_key=api_key) as gemini_client:
+            chat = gemini_client.chats.create(
+                model=model,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    tools=tools,
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
+                ),
+            )
+            response = chat.send_message(prompt)
         text = response.text
         if not text:
             raise RuntimeError("Gemini returned an empty response.")
