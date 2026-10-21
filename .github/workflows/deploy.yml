@@ -4,8 +4,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
-  REGION: asia-south1          # must match your Artifact Registry location
+  REGION: asia-south1
   IMAGE: asia-south1-docker.pkg.dev/${{ vars.GCP_PROJECT }}/demo/demo-app:${{ github.sha }}
 
 jobs:
@@ -16,7 +20,8 @@ jobs:
 
       - uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: projects/522415703187/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: gh-deployer@project-pythom.iam.gserviceaccount.com
 
       - uses: google-github-actions/setup-gcloud@v2
         with:
