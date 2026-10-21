@@ -1,8 +1,10 @@
+```yaml
 name: deploy
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -21,7 +23,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -32,7 +35,7 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ${{ env.PROJECT_ID }}
+          project_id: abdulproject-510307
           install_components: gke-gcloud-auth-plugin
 
       - name: Get GKE credentials
@@ -40,21 +43,26 @@ jobs:
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ vars.GKE_LOCATION }}
-          project_id: ${{ env.PROJECT_ID }}
+          project_id: abdulproject-510307
 
       - name: Build and push image
+        shell: bash
         run: |
-          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
-          docker build -t "$IMAGE" app/
-          docker push "$IMAGE"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build -t "${IMAGE}" app/
+          docker push "${IMAGE}"
 
       - name: Deploy application
+        shell: bash
         run: |
-          kubectl create namespace "$NAMESPACE" \
+          set -euo pipefail
+
+          kubectl create namespace "${NAMESPACE}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
-          sed "s|IMAGE_PLACEHOLDER|$IMAGE|g" k8s/deployment.yaml | kubectl apply -f -
+          sed "s|IMAGE_PLACEHOLDER|${IMAGE}|g" k8s/deployment.yaml \
+            | kubectl apply -f -
 
-          kubectl rollout status deployment/"$DEPLOYMENT" \
-            -n "$NAMESPACE" --timeout=180s
+          kubectl rollout status "deployment/${DEPLOYMENT}" \
+            -n "${NAMESPACE}" --timeout=180s
 ```
